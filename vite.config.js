@@ -10,7 +10,7 @@ const REPO_NAME = 'arv-d-voucher-mgs' // ← your GitHub repo name
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: process.env.NODE_ENV === 'production' ? '/arv-d-voucher-mgs/' : '/',
   resolve: {
     alias: {
       '@': '/src',
