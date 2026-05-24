@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
 // - If repo is "yourusername.github.io" → base: '/'
 // Change REPO_NAME below to match your GitHub repository name
 
-const REPO_NAME = 'sdvms' // ← change this if your repo has a different name
+const REPO_NAME = 'arv-d-voucher-mgs' // ← your GitHub repo name
 
 export default defineConfig({
   plugins: [react()],
