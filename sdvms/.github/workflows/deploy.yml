@@ -1,0 +1,58 @@
+name: Deploy SDVMS to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main   # Runs automatically every time you push to main branch
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # 1. Checkout your code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Build the app
+      - name: Build SDVMS
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # 5. Upload the dist/ folder as GitHub Pages artifact
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload build artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      # 6. Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
