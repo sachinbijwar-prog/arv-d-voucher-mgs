@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Menu, Bell } from 'lucide-react'
+import { Menu, Bell, LogOut } from 'lucide-react'
 
 const BREADCRUMBS = {
   '/':                'Dashboard',
@@ -13,7 +13,7 @@ const BREADCRUMBS = {
 }
 
 export default function Header({ onMenuClick }) {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const location = useLocation()
 
   const pathKey = Object.keys(BREADCRUMBS)
@@ -43,7 +43,7 @@ export default function Header({ onMenuClick }) {
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <button className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
           <Bell size={18} />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
@@ -52,13 +52,22 @@ export default function Header({ onMenuClick }) {
         {user?.picture
           ? <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full border-2 border-gray-200" />
           : (
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center" title={user?.name}>
               <span className="text-primary-700 font-semibold text-sm">
                 {user?.name?.charAt(0) || '?'}
               </span>
             </div>
           )
         }
+        
+        <button 
+          onClick={logout} 
+          className="flex items-center gap-1.5 p-2 rounded-lg text-red-500 hover:bg-red-50 transition-colors ml-1 border border-transparent hover:border-red-100"
+          title="Logout"
+        >
+          <LogOut size={16} />
+          <span className="text-xs font-medium hidden sm:block">Logout</span>
+        </button>
       </div>
     </header>
   )
