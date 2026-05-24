@@ -9,10 +9,11 @@ var VoucherService = (function () {
     'VoucherID','VoucherNumber','Date','VendorName','VendorContact','Category',
     'Wing','Description','InvoiceNo','InvoiceDate','Amount','GST','Total',
     'PaymentMode','ChequeUTR','Status','Remarks',
-    'InvoiceLink','PaymentProofLink','VendorSigLink','TreasurerSigLink','PDFLink',
+    'InvoiceLink','PaymentProofLink','VendorSigLink','TreasurerSigLink','ManagerSignatureLink','PDFLink',
     'CreatedBy','CreatedAt','SubmittedAt',
     'TreasurerVerifiedBy','TreasurerVerifiedAt',
     'ChairmanApprovedBy','ChairmanApprovedAt',
+    'SecretaryApprovedBy','SecretaryApprovedAt',
     'CompletedAt','ArchivedAt'
   ]
 
@@ -55,12 +56,14 @@ var VoucherService = (function () {
       PaymentProofLink:data.paymentProofLink || '',
       VendorSigLink:   data.vendorSigLink || '',
       TreasurerSigLink:data.treasurerSigLink || '',
+      ManagerSignatureLink: '',
       PDFLink:         '',
       CreatedBy:       data.createdBy || '',
       CreatedAt:       now,
       SubmittedAt:     data.status === 'Submitted' ? now : '',
       TreasurerVerifiedBy: '', TreasurerVerifiedAt: '',
       ChairmanApprovedBy: '',  ChairmanApprovedAt: '',
+      SecretaryApprovedBy: '', SecretaryApprovedAt: '',
       CompletedAt: '', ArchivedAt: '',
     }
 
@@ -91,8 +94,12 @@ var VoucherService = (function () {
     return { success: true }
   }
 
-  function approveVoucher(id, action, comment, approverEmail) {
+  function approveVoucher(id, action, comment, approverUsername, signatureLink = null) {
     const now = new Date().toISOString()
+    
+    const row = SheetsService.findRow(SheetsService.SHEET_NAMES.VOUCHER_MASTER, 'VoucherID', id)
+    if (!row) return { success: false, message: 'Voucher not found' }
+
     const updates = {}
 
     switch (action) {
@@ -102,18 +109,24 @@ var VoucherService = (function () {
         break
       case 'treasurer_verify':
         updates.Status               = 'Treasurer Verified'
-        updates.TreasurerVerifiedBy  = approverEmail
+        updates.TreasurerVerifiedBy  = approverUsername
         updates.TreasurerVerifiedAt  = now
         break
       case 'chairman_approve':
-        updates.Status              = 'Chairman Approved'
-        updates.ChairmanApprovedBy  = approverEmail
+        updates.ChairmanApprovedBy  = approverUsername
         updates.ChairmanApprovedAt  = now
         if (comment) updates.Remarks = comment
+        if (row.SecretaryApprovedBy) updates.Status = 'Ready for Payment'
         break
-      case 'complete_payment':
-        updates.Status      = 'Payment Completed'
+      case 'secretary_approve':
+        updates.SecretaryApprovedBy = approverUsername
+        updates.SecretaryApprovedAt = now
+        if (row.ChairmanApprovedBy) updates.Status = 'Ready for Payment'
+        break
+      case 'manager_sign':
+        updates.Status = 'Payment Completed'
         updates.CompletedAt = now
+        updates.ManagerSignatureLink = signatureLink || ''
         break
       case 'archive':
         updates.Status     = 'Archived'
@@ -132,17 +145,17 @@ var VoucherService = (function () {
 
     // Approval log
     const logRow = {
-      LogID:     'AL-' + Date.now(),
-      VoucherID: id,
-      Action:    action,
-      ByEmail:   approverEmail,
-      Comment:   comment || '',
-      Timestamp: now,
+      LogID:      'AL-' + Date.now(),
+      VoucherID:  id,
+      Action:     action,
+      ByUsername: approverUsername,
+      Comment:    comment || '',
+      Timestamp:  now,
     }
     SheetsService.appendRow(SheetsService.SHEET_NAMES.APPROVAL_LOG, logRow,
-      ['LogID','VoucherID','Action','ByEmail','Comment','Timestamp'])
+      ['LogID','VoucherID','Action','ByUsername','Comment','Timestamp'])
 
-    logAudit(approverEmail, 'APPROVE_VOUCHER', 'Voucher', `${action} on ${id}`)
+    logAudit(approverUsername, 'APPROVE_VOUCHER', 'Voucher', `${action} on ${id}`)
     return { success: true, updates }
   }
 
@@ -168,10 +181,11 @@ var VoucherService = (function () {
       paymentMode: r.PaymentMode, chequeUTR: r.ChequeUTR,
       status: r.Status, remarks: r.Remarks,
       invoiceLink: r.InvoiceLink, paymentProofLink: r.PaymentProofLink,
-      vendorSigLink: r.VendorSigLink, treasurerSigLink: r.TreasurerSigLink, pdfLink: r.PDFLink,
+      vendorSigLink: r.VendorSigLink, treasurerSigLink: r.TreasurerSigLink, managerSignatureLink: r.ManagerSignatureLink, pdfLink: r.PDFLink,
       createdBy: r.CreatedBy, createdAt: r.CreatedAt, submittedAt: r.SubmittedAt,
       treasurerVerifiedBy: r.TreasurerVerifiedBy, treasurerVerifiedAt: r.TreasurerVerifiedAt,
       chairmanApprovedBy: r.ChairmanApprovedBy, chairmanApprovedAt: r.ChairmanApprovedAt,
+      secretaryApprovedBy: r.SecretaryApprovedBy, secretaryApprovedAt: r.SecretaryApprovedAt,
       completedAt: r.CompletedAt,
     }))
 
@@ -191,11 +205,12 @@ var VoucherService = (function () {
       paymentMode: row.PaymentMode, chequeUTR: row.ChequeUTR,
       status: row.Status, remarks: row.Remarks,
       invoiceLink: row.InvoiceLink, paymentProofLink: row.PaymentProofLink,
-      vendorSigLink: row.VendorSigLink, treasurerSigLink: row.TreasurerSigLink,
+      vendorSigLink: row.VendorSigLink, treasurerSigLink: row.TreasurerSigLink, managerSignatureLink: row.ManagerSignatureLink,
       pdfLink: row.PDFLink, createdBy: row.CreatedBy, createdAt: row.CreatedAt,
       submittedAt: row.SubmittedAt,
       treasurerVerifiedBy: row.TreasurerVerifiedBy, treasurerVerifiedAt: row.TreasurerVerifiedAt,
       chairmanApprovedBy: row.ChairmanApprovedBy, chairmanApprovedAt: row.ChairmanApprovedAt,
+      secretaryApprovedBy: row.SecretaryApprovedBy, secretaryApprovedAt: row.SecretaryApprovedAt,
       completedAt: row.CompletedAt,
     }
   }
@@ -245,18 +260,18 @@ var VoucherService = (function () {
     }
   }
 
-  function logAudit(email, action, module_, details) {
+  function logAudit(username, action, module_, details) {
     try {
       const row = {
         LogID:     'AU-' + Date.now(),
-        UserEmail: email || 'system',
+        Username:  username || 'system',
         Action:    action,
         Module:    module_,
         Details:   details,
         Timestamp: new Date().toISOString(),
       }
       SheetsService.appendRow(SheetsService.SHEET_NAMES.AUDIT_LOG, row,
-        ['LogID','UserEmail','Action','Module','Details','Timestamp'])
+        ['LogID','Username','Action','Module','Details','Timestamp'])
     } catch (_) { /* silent */ }
   }
 

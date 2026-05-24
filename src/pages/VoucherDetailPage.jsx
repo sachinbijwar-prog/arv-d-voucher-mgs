@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, CheckCircle, XCircle, Clock, User } from 'lucide-react'
+import { ArrowLeft, Download, CheckCircle, XCircle, Clock, User, PenTool } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { voucherService } from '../services/voucherService'
 import { useFetch, useAction } from '../hooks/useFetch'
-import { formatCurrency, formatDate, formatDateTime, STATUS_CONFIG, WORKFLOW_TRANSITIONS } from '../utils/formatters'
+import { formatCurrency, formatDate, formatDateTime, STATUS_CONFIG } from '../utils/formatters'
 import { useAuth } from '../context/AuthContext'
 import { generateVoucherPDF } from '../utils/pdfGenerator'
+import SignaturePad from '../components/SignaturePad'
 
 function TimelineItem({ icon: Icon, color, title, by, at, comment }) {
   return (
@@ -30,12 +31,14 @@ export default function VoucherDetailPage() {
   const { user, role, hasPermission } = useAuth()
   const { data: voucher, loading, error, refetch } = useFetch(() => voucherService.getById(id), [id])
   const { execute, loading: acting } = useAction()
+  
   const [comment, setComment] = useState('')
   const [showCommentFor, setShowCommentFor] = useState(null)
+  const [managerSig, setManagerSig] = useState(null)
 
-  async function doAction(action) {
+  async function doAction(action, signatureLink = null) {
     try {
-      await execute(() => voucherService.approve(id, action, comment, user?.email))
+      await execute(() => voucherService.approve(id, action, comment, user?.username, signatureLink))
       toast.success('Voucher updated!')
       setComment('')
       setShowCommentFor(null)
@@ -53,12 +56,17 @@ export default function VoucherDetailPage() {
     </div>
   )
 
-  const transition = WORKFLOW_TRANSITIONS[voucher.status]
-  const canAct =
-    (voucher.status === 'Draft' && hasPermission('SUBMIT_VOUCHER')) ||
-    (voucher.status === 'Submitted' && hasPermission('TREASURER_VERIFY')) ||
-    (voucher.status === 'Treasurer Verified' && hasPermission('CHAIRMAN_APPROVE')) ||
-    (['Chairman Approved', 'Payment Completed'].includes(voucher.status) && hasPermission('TREASURER_VERIFY'))
+  // Calculate permissions for actions based on state
+  const canSubmit = voucher.status === 'Draft' && hasPermission('SUBMIT_VOUCHER')
+  const canVerify = voucher.status === 'Submitted' && hasPermission('TREASURER_VERIFY')
+  
+  const needsChairmanApproval = voucher.status === 'Treasurer Verified' && !voucher.chairmanApprovedBy
+  const needsSecretaryApproval = voucher.status === 'Treasurer Verified' && !voucher.secretaryApprovedBy
+  
+  const canApproveChairman = needsChairmanApproval && hasPermission('CHAIRMAN_APPROVE')
+  const canApproveSecretary = needsSecretaryApproval && hasPermission('SECRETARY_APPROVE')
+  
+  const canManagerSign = voucher.status === 'Ready for Payment' && role === 'manager'
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
@@ -138,6 +146,34 @@ export default function VoucherDetailPage() {
             </div>
           </div>
 
+          {/* Manager Signature Pad */}
+          {canManagerSign && (
+            <div className="card p-5 border-l-4 border-l-primary-500 animate-slide-in">
+              <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <PenTool size={18} className="text-primary-600" />
+                Manager Receipt Confirmation
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">Please sign below to confirm you have received the cheque for this voucher.</p>
+              
+              <SignaturePad
+                id="manager-signature"
+                label="Manager Signature"
+                value={managerSig}
+                onChange={setManagerSig}
+              />
+              
+              <div className="mt-4 flex justify-end">
+                <button 
+                  className="btn-primary" 
+                  disabled={!managerSig || acting}
+                  onClick={() => doAction('manager_sign', managerSig)}
+                >
+                  {acting ? <span className="spinner w-4 h-4" /> : 'Confirm Receipt & Complete'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Attached files */}
           {(voucher.invoiceLink || voucher.paymentProofLink) && (
             <div className="card p-5">
@@ -155,32 +191,19 @@ export default function VoucherDetailPage() {
                     📸 Payment Proof
                   </a>
                 )}
-                {voucher.pdfLink && (
-                  <a href={voucher.pdfLink} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary-600 hover:underline">
-                    📋 Signed Voucher PDF
-                  </a>
-                )}
               </div>
             </div>
           )}
 
-          {/* Signatures */}
-          {(voucher.vendorSigLink || voucher.treasurerSigLink) && (
+          {/* Signatures Display */}
+          {(voucher.managerSignatureLink) && (
             <div className="card p-5">
               <h3 className="font-semibold text-gray-700 mb-3">Signatures</h3>
               <div className="grid grid-cols-2 gap-4">
-                {voucher.vendorSigLink && (
+                {voucher.managerSignatureLink && (
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Vendor Signature</p>
-                    <img src={voucher.vendorSigLink} alt="Vendor signature"
-                      className="border rounded-lg h-20 w-full object-contain bg-gray-50" />
-                  </div>
-                )}
-                {voucher.treasurerSigLink && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Treasurer Signature</p>
-                    <img src={voucher.treasurerSigLink} alt="Treasurer signature"
+                    <p className="text-xs text-gray-500 mb-1">Manager Signature</p>
+                    <img src={voucher.managerSignatureLink} alt="Manager signature"
                       className="border rounded-lg h-20 w-full object-contain bg-gray-50" />
                   </div>
                 )}
@@ -191,12 +214,13 @@ export default function VoucherDetailPage() {
 
         {/* Right column: Timeline + Actions */}
         <div className="space-y-4">
-          {/* Approval actions */}
-          {canAct && transition && (
+          
+          {/* Action Buttons */}
+          {(canSubmit || canVerify || canApproveChairman || canApproveSecretary) && (
             <div className="card p-5">
               <h3 className="font-semibold text-gray-700 mb-3">Actions</h3>
 
-              {showCommentFor === transition.action ? (
+              {showCommentFor ? (
                 <div className="space-y-3">
                   <textarea
                     rows={3}
@@ -210,7 +234,7 @@ export default function VoucherDetailPage() {
                       Cancel
                     </button>
                     <button
-                      onClick={() => doAction(transition.action)}
+                      onClick={() => doAction(showCommentFor)}
                       disabled={acting}
                       className="btn-success btn-sm flex-1"
                     >
@@ -220,18 +244,32 @@ export default function VoucherDetailPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <button
-                    onClick={() => setShowCommentFor(transition.action)}
-                    className="btn-primary w-full"
-                  >
-                    <CheckCircle size={16} />
-                    {transition.label}
-                  </button>
+                  {canSubmit && (
+                    <button onClick={() => setShowCommentFor('submit')} className="btn-primary w-full">
+                      <CheckCircle size={16} /> Submit for Review
+                    </button>
+                  )}
+                  {canVerify && (
+                    <button onClick={() => setShowCommentFor('treasurer_verify')} className="btn-primary w-full">
+                      <CheckCircle size={16} /> Verify (Treasurer)
+                    </button>
+                  )}
+                  {canApproveChairman && (
+                    <button onClick={() => setShowCommentFor('chairman_approve')} className="btn-primary w-full">
+                      <CheckCircle size={16} /> Approve (Chairman)
+                    </button>
+                  )}
+                  {canApproveSecretary && (
+                    <button onClick={() => setShowCommentFor('secretary_approve')} className="btn-primary w-full">
+                      <CheckCircle size={16} /> Approve (Secretary)
+                    </button>
+                  )}
+                  
                   {voucher.status !== 'Draft' && (
                     <button
                       onClick={() => doAction('reject')}
                       disabled={acting}
-                      className="btn-danger w-full btn-sm"
+                      className="btn-danger w-full btn-sm mt-4"
                     >
                       <XCircle size={14} /> Return to Draft
                     </button>
@@ -276,10 +314,19 @@ export default function VoucherDetailPage() {
                   comment={voucher.remarks}
                 />
               )}
+              {voucher.secretaryApprovedAt && (
+                <TimelineItem
+                  icon={CheckCircle} color="bg-green-500"
+                  title="Secretary Approved"
+                  by={voucher.secretaryApprovedBy}
+                  at={voucher.secretaryApprovedAt}
+                />
+              )}
               {voucher.completedAt && (
                 <TimelineItem
                   icon={CheckCircle} color="bg-emerald-500"
                   title="Payment Completed"
+                  by={voucher.managerSignatureLink ? 'Manager Signature' : undefined}
                   at={voucher.completedAt}
                 />
               )}

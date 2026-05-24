@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { CheckCircle, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { voucherService, categoryService, vendorService } from '../services/voucherService'
 import { useFetch } from '../hooks/useFetch'
 import { PAYMENT_MODES, WINGS } from '../utils/formatters'
 import FileUpload from '../components/FileUpload'
-import SignaturePad from '../components/SignaturePad'
 import { useAuth } from '../context/AuthContext'
 
 const STEPS = [
   { id: 1, label: 'Voucher Details' },
   { id: 2, label: 'Invoice & Payment' },
   { id: 3, label: 'File Uploads' },
-  { id: 4, label: 'Signatures' },
-  { id: 5, label: 'Review & Submit' },
+  { id: 4, label: 'Review & Submit' },
 ]
 
 const INITIAL = {
@@ -23,7 +21,6 @@ const INITIAL = {
   invoiceNo: '', invoiceDate: '', amount: '', gst: '', total: '',
   paymentMode: 'Cheque', chequeUTR: '', wing: '', remarks: '',
   invoiceFiles: [], paymentProofFiles: [], otherFiles: [],
-  vendorSignature: null, treasurerSignature: null,
 }
 
 function StepIndicator({ current }) {
@@ -55,7 +52,7 @@ function FieldError({ msg }) {
 
 export default function CreateVoucherPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const [step, setStep] = useState(1)
   const [form, setForm] = useState(INITIAL)
   const [errors, setErrors] = useState({})
@@ -70,6 +67,10 @@ export default function CreateVoucherPage() {
       setForm(f => ({ ...f, voucherNumber: res.voucherNumber || res }))
     })
   }, [])
+
+  if (!hasPermission('CREATE_VOUCHER')) {
+    return <Navigate to="/" replace />
+  }
 
   function set(key, val) {
     setForm(f => {
@@ -105,7 +106,7 @@ export default function CreateVoucherPage() {
     return Object.keys(e).length === 0
   }
 
-  function next() { if (validateStep(step)) setStep(s => Math.min(5, s+1)) }
+  function next() { if (validateStep(step)) setStep(s => Math.min(4, s+1)) }
   function back() { setStep(s => Math.max(1, s-1)) }
 
   async function handleSubmit(asDraft = true) {
@@ -115,7 +116,7 @@ export default function CreateVoucherPage() {
       const payload = {
         ...form,
         status: asDraft ? 'Draft' : 'Submitted',
-        createdBy: user?.email,
+        createdBy: user?.username,
         amount: parseFloat(form.amount) || 0,
         gst:    parseFloat(form.gst)    || 0,
         total:  parseFloat(form.total)  || 0,
@@ -318,27 +319,6 @@ export default function CreateVoucherPage() {
 
         {/* ── STEP 4 ── */}
         {step === 4 && (
-          <div className="space-y-6">
-            <h3 className="font-semibold text-gray-700 border-b pb-2">Digital Signatures</h3>
-
-            <SignaturePad
-              id="vendor-signature"
-              label="Vendor / Contractor Signature"
-              value={form.vendorSignature}
-              onChange={sig => set('vendorSignature', sig)}
-            />
-
-            <SignaturePad
-              id="treasurer-signature"
-              label="Treasurer Signature"
-              value={form.treasurerSignature}
-              onChange={sig => set('treasurerSignature', sig)}
-            />
-          </div>
-        )}
-
-        {/* ── STEP 5 ── */}
-        {step === 5 && (
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-700 border-b pb-2">Review & Submit</h3>
 
@@ -368,7 +348,7 @@ export default function CreateVoucherPage() {
               <p className="text-sm text-gray-800">{form.description}</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="grid grid-cols-2 gap-3 text-center">
               <div className="bg-blue-50 rounded-lg p-2">
                 <p className="text-xs text-blue-600">Invoice Files</p>
                 <p className="font-bold text-blue-800">{form.invoiceFiles.length}</p>
@@ -376,12 +356,6 @@ export default function CreateVoucherPage() {
               <div className="bg-purple-50 rounded-lg p-2">
                 <p className="text-xs text-purple-600">Payment Proof</p>
                 <p className="font-bold text-purple-800">{form.paymentProofFiles.length}</p>
-              </div>
-              <div className="bg-green-50 rounded-lg p-2">
-                <p className="text-xs text-green-600">Signatures</p>
-                <p className="font-bold text-green-800">
-                  {[form.vendorSignature, form.treasurerSignature].filter(Boolean).length}/2
-                </p>
               </div>
             </div>
 
@@ -407,7 +381,7 @@ export default function CreateVoucherPage() {
         )}
 
         {/* Navigation */}
-        {step < 5 && (
+        {step < 4 && (
           <div className="flex gap-3 mt-6 pt-4 border-t border-gray-100">
             {step > 1 && (
               <button id="btn-back" onClick={back} className="btn-secondary flex items-center gap-1">
@@ -415,7 +389,7 @@ export default function CreateVoucherPage() {
               </button>
             )}
             <button id="btn-next" onClick={next} className="btn-primary flex-1 flex items-center justify-center gap-1">
-              {step === 4 ? 'Review' : 'Continue'} <ChevronRight size={16} />
+              {step === 3 ? 'Review' : 'Continue'} <ChevronRight size={16} />
             </button>
           </div>
         )}

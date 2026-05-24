@@ -4,12 +4,38 @@
 
 var AuthService = (function () {
 
-  const ROLE_MAP = {
-    treasurer: 'treasurer',
-    manager:   'manager',
-    chairman:  'chairman',
-    auditor:   'auditor',
-    committee: 'committee',
+  function getUsers() {
+    try {
+      const rows = SheetsService.getAllRows(SheetsService.SHEET_NAMES.USERS)
+      return rows.map(r => ({
+        id: r['Username'], // Using Username as ID
+        username: r['Username'],
+        password: r['Password'], // In a real app this should be hashed, but as requested it's plain text here
+        name: r['Name'],
+        role: r['Role'],
+        active: r['Active'] !== false
+      }))
+    } catch (_) {
+      return []
+    }
+  }
+
+  function updatePassword(username, oldPassword, newPassword) {
+    const rows = SheetsService.getAllRows(SheetsService.SHEET_NAMES.USERS)
+    const user = rows.find(r => r['Username'] && r['Username'].toLowerCase() === username.toLowerCase())
+    
+    if (!user) {
+      return { success: false, message: 'User not found' }
+    }
+    if (user['Password'] !== oldPassword) {
+      return { success: false, message: 'Incorrect old password' }
+    }
+
+    const ok = SheetsService.updateRow(SheetsService.SHEET_NAMES.USERS, 'Username', user['Username'], {
+      Password: newPassword
+    })
+
+    return { success: ok, message: ok ? 'Password updated' : 'Failed to update password' }
   }
 
   function getUserRole(email) {
@@ -24,15 +50,7 @@ var AuthService = (function () {
     return { role: 'committee', email: email }
   }
 
-  function verifyToken(accessToken) {
-    // Validate Google OAuth token
-    const url  = 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + accessToken
-    const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true })
-    if (resp.getResponseCode() !== 200) return null
-    return JSON.parse(resp.getContentText())
-  }
-
-  return { getUserRole, verifyToken }
+  return { getUsers, updatePassword, getUserRole }
 })()
 
 

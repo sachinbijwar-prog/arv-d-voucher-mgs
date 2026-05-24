@@ -36,10 +36,6 @@ function doGet(e) {
     const params = e.parameter || {}
     const action = params.action || ''
 
-    // Verify token
-    const token = (e.parameter.token || '').replace('Bearer ', '')
-    // Note: for GET requests, token comes as query param
-
     switch (action) {
       case 'getVouchers':
         return jsonResponse(VoucherService.getVouchers(params))
@@ -59,8 +55,8 @@ function doGet(e) {
       case 'getCategories':
         return jsonResponse(SheetsService.getCategories())
 
-      case 'getUserRole':
-        return jsonResponse(AuthService.getUserRole(params.email))
+      case 'getUsers':
+        return jsonResponse(AuthService.getUsers())
 
       default:
         return errorResponse('Unknown action: ' + action)
@@ -79,10 +75,6 @@ function doPost(e) {
       body = JSON.parse(e.postData.contents)
     }
 
-    // Verify token
-    const authHeader = e.parameter?.Authorization || body.token || ''
-    // In production: AuthService.verifyToken(authHeader.replace('Bearer ', ''))
-
     const action = body.action || ''
 
     switch (action) {
@@ -93,7 +85,7 @@ function doPost(e) {
         return jsonResponse(VoucherService.updateVoucher(body.id, body))
 
       case 'approveVoucher':
-        return jsonResponse(VoucherService.approveVoucher(body.id, body.approval, body.comment, body.approverEmail))
+        return jsonResponse(VoucherService.approveVoucher(body.id, body.approval, body.comment, body.approverEmail, body.signatureLink))
 
       case 'uploadFile':
         return jsonResponse(DriveService.uploadFile(body.base64, body.name, body.mimeType, body.folder))
@@ -104,11 +96,8 @@ function doPost(e) {
       case 'updateVendor':
         return jsonResponse(VendorService.updateVendor(body.id, body))
 
-      case 'getUserRole':
-        return jsonResponse(AuthService.getUserRole(body.email))
-
-      case 'generatePDF':
-        return jsonResponse(PDFService.generateAndSave(body.voucherId))
+      case 'updatePassword':
+        return jsonResponse(AuthService.updatePassword(body.username, body.oldPassword, body.newPassword))
 
       default:
         return errorResponse('Unknown action: ' + action)

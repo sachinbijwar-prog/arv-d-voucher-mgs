@@ -17,7 +17,7 @@ export default function AppLayout() {
       )}
 
       {/* Sidebar */}
-      <aside className={`nav-drawer lg:static lg:translate-x-0 lg:flex lg:flex-col lg:w-64 lg:shadow-none lg:border-r lg:border-gray-200 ${sidebarOpen ? 'open' : 'closed'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-2xl transform transition-transform duration-300 lg:static lg:translate-x-0 lg:flex lg:flex-col lg:shadow-none lg:border-r lg:border-gray-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar onClose={() => setSidebarOpen(false)} />
       </aside>
 

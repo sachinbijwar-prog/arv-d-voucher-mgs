@@ -141,24 +141,41 @@ export const voucherService = {
     return api({ method: 'post', data: { action: 'updateVoucher', id, ...data } })
   },
 
-  async approve(id, action, comment, approverEmail) {
+  async approve(id, action, comment, approverEmail, signatureLink = null) {
     if (isDev) {
       await delay(600)
       const idx = MOCK_VOUCHERS.findIndex(v => v.id === id)
       if (idx === -1) throw new Error('Voucher not found')
-      const STATUS_MAP = {
-        submit: 'Submitted',
-        treasurer_verify: 'Treasurer Verified',
-        chairman_approve: 'Chairman Approved',
-        complete_payment: 'Payment Completed',
-        archive: 'Archived',
-        reject: 'Draft',
+      const v = MOCK_VOUCHERS[idx]
+
+      if (action === 'submit') {
+        v.status = 'Submitted'
+        v.submittedAt = new Date().toISOString()
+      } else if (action === 'treasurer_verify') {
+        v.status = 'Treasurer Verified'
+        v.treasurerVerifiedBy = approverEmail
+        v.treasurerVerifiedAt = new Date().toISOString()
+      } else if (action === 'chairman_approve') {
+        v.chairmanApprovedBy = approverEmail
+        v.chairmanApprovedAt = new Date().toISOString()
+        v.remarks = comment || v.remarks
+        if (v.secretaryApprovedBy) v.status = 'Ready for Payment'
+      } else if (action === 'secretary_approve') {
+        v.secretaryApprovedBy = approverEmail
+        v.secretaryApprovedAt = new Date().toISOString()
+        if (v.chairmanApprovedBy) v.status = 'Ready for Payment'
+      } else if (action === 'manager_sign') {
+        v.status = 'Payment Completed'
+        v.completedAt = new Date().toISOString()
+        v.managerSignatureLink = signatureLink
+      } else if (action === 'archive') {
+        v.status = 'Archived'
+      } else if (action === 'reject') {
+        v.status = 'Draft'
       }
-      MOCK_VOUCHERS[idx].status = STATUS_MAP[action] || MOCK_VOUCHERS[idx].status
-      MOCK_VOUCHERS[idx].remarks = comment || MOCK_VOUCHERS[idx].remarks
       return { success: true }
     }
-    return api({ method: 'post', data: { action: 'approveVoucher', id, approval: action, comment, approverEmail } })
+    return api({ method: 'post', data: { action: 'approveVoucher', id, approval: action, comment, approverEmail, signatureLink } })
   },
 
   async getNextNumber() {
